@@ -61,7 +61,10 @@ export default function Home() {
     const searchLower = debouncedSearchTerm.toLowerCase().trim();
 
     return advocates.filter((advocate) => {
+      const fullName = `${advocate.firstName} ${advocate.lastName}`.toLowerCase();
+
       return (
+        fullName.includes(searchLower) ||
         advocate.firstName.toLowerCase().includes(searchLower) ||
         advocate.lastName.toLowerCase().includes(searchLower) ||
         advocate.city.toLowerCase().includes(searchLower) ||
