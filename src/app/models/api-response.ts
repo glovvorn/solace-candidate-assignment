@@ -1,5 +1,6 @@
-import { Advocate } from "./advocate";
+import { PaginationMeta } from "./pagination";
 
-export interface ApiResponse {
-  data: Advocate[];
+export interface ApiResponse<T = any> {
+  data: T[];
+  pagination: PaginationMeta;
 }
