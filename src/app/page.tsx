@@ -1,21 +1,13 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-
-interface Advocate {
-  id: string;
-  firstName: string;
-  lastName: string;
-  city: string;
-  degree: string;
-  specialties: string[];
-  yearsOfExperience: number;
-  phoneNumber: string;
-}
-
-interface ApiResponse {
-  data: Advocate[];
-}
+import LoadingSpinner from "./components/LoadingSpinner";
+import SearchBar from "./components/SearchBar";
+import AdvocateTable from "./components/AdvocateTable";
+import EmptyState from "./components/EmptyState";
+import ErrorState from "./components/ErrorState";
+import { Advocate } from "./models/advocate";
+import { ApiResponse } from "./models/api-response";
 
 const DEBOUNCE_DELAY = 300; // in milliseconds
 
@@ -31,17 +23,18 @@ export default function Home() {
       try {
         setIsLoading(true);
         const response = await fetch("/api/advocates");
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const jsonResponse: ApiResponse = await response.json();
         setAdvocates(jsonResponse.data || []);
-        
       } catch (err) {
         console.error("Error fetching advocates:", err);
-        setError(err instanceof Error ? err.message : "Failed to load advocates");
+        setError(
+          err instanceof Error ? err.message : "Failed to load advocates"
+        );
       } finally {
         setIsLoading(false);
       }
@@ -55,27 +48,27 @@ export default function Home() {
       setDebouncedSearchTerm(searchTerm);
     }, DEBOUNCE_DELAY);
 
-    // Cleanup function to cancel the timer if searchTerm changes
     return () => {
       clearTimeout(timer);
     };
   }, [searchTerm]);
 
-  // This prevents re-filtering on every render, only when dependencies change
   const filteredAdvocates = useMemo(() => {
     if (!debouncedSearchTerm.trim()) {
       return advocates;
     }
 
     const searchLower = debouncedSearchTerm.toLowerCase().trim();
-    
+
     return advocates.filter((advocate) => {
       return (
         advocate.firstName.toLowerCase().includes(searchLower) ||
         advocate.lastName.toLowerCase().includes(searchLower) ||
         advocate.city.toLowerCase().includes(searchLower) ||
         advocate.degree.toLowerCase().includes(searchLower) ||
-        advocate.specialties.some(s => s.toLowerCase().includes(searchLower)) ||
+        advocate.specialties.some((s) =>
+          s.toLowerCase().includes(searchLower)
+        ) ||
         advocate.yearsOfExperience.toString().includes(debouncedSearchTerm)
       );
     });
@@ -90,79 +83,54 @@ export default function Home() {
     setDebouncedSearchTerm("");
   }, []);
 
+  const handleRetry = () => {
+    window.location.reload();
+  };
+
   if (isLoading) {
-    return (
-      <main style={{ margin: "24px" }}>
-        <h1>Solace Advocates</h1>
-        <p>Loading advocates...</p>
-      </main>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
-    <main style={{ margin: "24px" }}>
-      <h1>Solace Advocates</h1>
-      <br />
-      <br />
-      <div>
-        <p>Search</p>
-        <p>
-          Searching for: <span>{debouncedSearchTerm}</span>
-        </p>
-        <input 
-          style={{ border: "1px solid black" }} 
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            Find Your Advocate
+          </h1>
+          <p className="text-lg text-gray-600">
+            Connect with experienced healthcare advocates who can help guide
+            your journey
+          </p>
+        </header>
+
+        <SearchBar
+          searchTerm={searchTerm}
+          debouncedSearchTerm={debouncedSearchTerm}
+          resultCount={filteredAdvocates.length}
+          totalCount={advocates.length}
           onChange={handleSearchChange}
-          value={searchTerm}
-          placeholder="Search by name, city, degree, specialty..."
+          onReset={handleReset}
         />
-        <button onClick={handleReset}>Reset Search</button>
+
+        {error && <ErrorState error={error} onRetry={handleRetry} />}
+
+        {filteredAdvocates.length === 0 && !error && debouncedSearchTerm && (
+          <EmptyState
+            type="no-results"
+            searchTerm={debouncedSearchTerm}
+            onClear={handleReset}
+          />
+        )}
+
+        {advocates.length === 0 && !error && !isLoading && (
+          <EmptyState type="no-data" />
+        )}
+
+        {filteredAdvocates.length > 0 && (
+          <AdvocateTable advocates={filteredAdvocates} />
+        )}
       </div>
-      <br />
-      <br />
-      {error && (
-        <div style={{ color: "red", marginBottom: "20px" }}>
-          Error loading advocates: {error}
-        </div>
-      )}
-      {filteredAdvocates.length === 0 && !error && debouncedSearchTerm && (
-        <p>No advocates found matching &quot;{debouncedSearchTerm}&quot;</p>
-      )}
-      {filteredAdvocates.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>First Name</th>
-              <th>Last Name</th>
-              <th>City</th>
-              <th>Degree</th>
-              <th>Specialties</th>
-              <th>Years of Experience</th>
-              <th>Phone Number</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAdvocates.map((advocate) => {
-              return (
-                <tr key={advocate.id || `${advocate.firstName}-${advocate.lastName}-${advocate.phoneNumber}`}>
-                  <td>{advocate.firstName}</td>
-                  <td>{advocate.lastName}</td>
-                  <td>{advocate.city}</td>
-                  <td>{advocate.degree}</td>
-                  <td>
-                    {advocate.specialties.map((s, index) => (
-                      <div key={`${advocate.id || advocate.phoneNumber}-specialty-${index}`}>
-                        {s}
-                      </div>
-                    ))}
-                  </td>
-                  <td>{advocate.yearsOfExperience}</td>
-                  <td>{advocate.phoneNumber}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
     </main>
   );
 }
