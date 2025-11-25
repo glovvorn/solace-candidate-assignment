@@ -1,48 +1,25 @@
+// src/app/page.tsx
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import LoadingSpinner from "./components/LoadingSpinner";
 import SearchBar from "./components/SearchBar";
 import AdvocateTable from "./components/AdvocateTable";
 import EmptyState from "./components/EmptyState";
 import ErrorState from "./components/ErrorState";
-import { Advocate } from "./models/advocate";
-import { ApiResponse } from "./models/api-response";
+import Pagination from "./components/Pagination";
+import { useAdvocates } from "./hooks/useAdvocates";
 
 const DEBOUNCE_DELAY = 300; // in milliseconds
 
 export default function Home() {
-  const [advocates, setAdvocates] = useState<Advocate[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    const fetchAdvocates = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch("/api/advocates");
+  const { advocates, pagination, isLoading, error, fetchAdvocates } =
+    useAdvocates(1, 50);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const jsonResponse: ApiResponse = await response.json();
-        setAdvocates(jsonResponse.data || []);
-      } catch (err) {
-        console.error("Error fetching advocates:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load advocates"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAdvocates();
-  }, []);
-
+  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
@@ -53,29 +30,10 @@ export default function Home() {
     };
   }, [searchTerm]);
 
-  const filteredAdvocates = useMemo(() => {
-    if (!debouncedSearchTerm.trim()) {
-      return advocates;
-    }
-
-    const searchLower = debouncedSearchTerm.toLowerCase().trim();
-
-    return advocates.filter((advocate) => {
-      const fullName = `${advocate.firstName} ${advocate.lastName}`.toLowerCase();
-
-      return (
-        fullName.includes(searchLower) ||
-        advocate.firstName.toLowerCase().includes(searchLower) ||
-        advocate.lastName.toLowerCase().includes(searchLower) ||
-        advocate.city.toLowerCase().includes(searchLower) ||
-        advocate.degree.toLowerCase().includes(searchLower) ||
-        advocate.specialties.some((s) =>
-          s.toLowerCase().includes(searchLower)
-        ) ||
-        advocate.yearsOfExperience.toString().includes(debouncedSearchTerm)
-      );
-    });
-  }, [advocates, debouncedSearchTerm]);
+  // Fetch advocates when debounced search changes
+  useEffect(() => {
+    fetchAdvocates(1, debouncedSearchTerm);
+  }, [debouncedSearchTerm, fetchAdvocates]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -87,10 +45,16 @@ export default function Home() {
   }, []);
 
   const handleRetry = () => {
-    window.location.reload();
+    fetchAdvocates(1, debouncedSearchTerm);
   };
 
-  if (isLoading) {
+  const handlePageChange = (page: number) => {
+    fetchAdvocates(page, debouncedSearchTerm);
+    // Scroll to top of results
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (isLoading && advocates.length === 0) {
     return <LoadingSpinner />;
   }
 
@@ -109,16 +73,20 @@ export default function Home() {
 
         <SearchBar
           searchTerm={searchTerm}
-          debouncedSearchTerm={debouncedSearchTerm}
-          resultCount={filteredAdvocates.length}
-          totalCount={advocates.length}
           onChange={handleSearchChange}
           onReset={handleReset}
+          statusMessage={
+            debouncedSearchTerm
+              ? `Showing ${pagination?.total ?? 0} result${
+                  (pagination?.total ?? 0) !== 1 ? "s" : ""
+                } for "${debouncedSearchTerm}"`
+              : `Showing all ${pagination?.total ?? 0} advocates`
+          }
         />
 
         {error && <ErrorState error={error} onRetry={handleRetry} />}
 
-        {filteredAdvocates.length === 0 && !error && debouncedSearchTerm && (
+        {advocates.length === 0 && !error && debouncedSearchTerm && (
           <EmptyState
             type="no-results"
             searchTerm={debouncedSearchTerm}
@@ -126,12 +94,30 @@ export default function Home() {
           />
         )}
 
-        {advocates.length === 0 && !error && !isLoading && (
-          <EmptyState type="no-data" />
-        )}
+        {advocates.length === 0 &&
+          !error &&
+          !isLoading &&
+          !debouncedSearchTerm && <EmptyState type="no-data" />}
 
-        {filteredAdvocates.length > 0 && (
-          <AdvocateTable advocates={filteredAdvocates} />
+        {advocates.length > 0 && (
+          <>
+            <AdvocateTable advocates={advocates} />
+
+            {isLoading && (
+              <div className="flex justify-center py-8">
+                <div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              </div>
+            )}
+
+            {pagination && (
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                onPageChange={handlePageChange}
+                isLoading={isLoading}
+              />
+            )}
+          </>
         )}
       </div>
     </main>
